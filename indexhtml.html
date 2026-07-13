@@ -251,7 +251,7 @@
   <header>
     <span class="flag">🏆</span>
     <h1>Equipo del <span>Mes</span></h1>
-    <p class="subtitle">Así va el equipo este mes — ¡vamos con todo!</p>
+    <p class="subtitle">Solo aparecen quienes van al ritmo del líder — mínimo (entregas del líder − 25).</p>
     <div class="month-chip-row">
       <select id="monthSelect"></select>
     </div>
@@ -266,8 +266,8 @@
 
   <footer>
     <div class="big">🚚💨</div>
-    Se muestran las entregas completadas y el % de efectividad de cada operador.<br>
-    ⭐ = top 3 en efectividad entre quienes llevan un volumen competitivo de entregas.<br>
+    Solo se muestra a quienes llevan al menos (entregas del líder − 25) — el pelotón de punta.<br>
+    ⭐ = top 3 en efectividad dentro de ese pelotón.<br>
     ⭐⭐ = además de eso, es quien más entregas lleva en el mes.<br>
     ¡Gracias por su esfuerzo en ruta todos los días!
   </footer>
@@ -404,8 +404,7 @@ const monthNames = {
   }
 
   const track = document.getElementById('track');
-  const TOP_N = 10;
-  const STAR_MARGIN = 25; // qualifica quien tenga al menos (max entregas - este margen)
+  const STAR_MARGIN = 25; // solo aparecen quienes tengan al menos (max entregas - este margen)
   const medals = ['🥇','🥈','🥉'];
 
   function efectClass(v){
@@ -477,13 +476,20 @@ const monthNames = {
     });
   }
 
-  function topRows(day){
+  function activeRows(day){
     const md = getMonthCum(currentMonth);
     const rows = md.perDay[day] || [];
+    return rows.filter(r => (r.exitosoCum + r.rechazadoCum) > 0);
+  }
+
+  function qualifiedRows(day){
+    const rows = activeRows(day);
+    if(rows.length===0) return [];
+    const maxEntregas = Math.max(...rows.map(r=>r.productividadCum));
+    const threshold = maxEntregas - STAR_MARGIN;
     return rows
-      .filter(r => (r.exitosoCum + r.rechazadoCum) > 0)
-      .sort((a,b)=> b.productividadCum - a.productividadCum)
-      .slice(0, TOP_N);
+      .filter(r => r.productividadCum >= threshold)
+      .sort((a,b)=> b.productividadCum - a.productividadCum);
   }
 
   let playTimer = null;
@@ -491,25 +497,15 @@ const monthNames = {
     const md = getMonthCum(currentMonth);
     if(playTimer) clearInterval(playTimer);
 
-    const allActiveFinal = (md.perDay[md.maxDay] || []).filter(r => (r.exitosoCum + r.rechazadoCum) > 0);
-    starOps = computeStarWinners(allActiveFinal);
-
-    let finalRows = topRows(md.maxDay);
-    starOps.forEach(op=>{
-      if(!finalRows.find(r=>r.op===op)){
-        const r = allActiveFinal.find(a=>a.op===op);
-        if(r) finalRows.push(r);
-      }
-    });
-    finalRows.sort((a,b)=> b.productividadCum - a.productividadCum);
-
+    const finalRows = qualifiedRows(md.maxDay);
+    starOps = computeStarWinners(finalRows);
     ensureLanes(finalRows);
 
     if(finalRows.length===0) return;
 
     let d = 1;
     const step = ()=>{
-      const rows = topRows(d);
+      const rows = activeRows(d);
       const rowMap = {};
       rows.forEach(r=>rowMap[r.op]=r);
       const framed = finalRows.map(fr => rowMap[fr.op] || {op:fr.op, productividadCum:0, efectividad:null});
